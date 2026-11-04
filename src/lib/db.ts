@@ -41,6 +41,30 @@ async function migrate(sql: NeonQueryFunction<false, false>) {
     body text not null,
     created_at timestamptz not null default now()
   )`
+  await sql`alter table members add column if not exists mascot_checked_at timestamptz`
+  await sql`create table if not exists mascot_messages (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id) on delete cascade,
+    kind text not null,
+    decl_id uuid references declarations(id) on delete cascade,
+    body text not null,
+    created_at timestamptz not null default now(),
+    read_at timestamptz
+  )`
+  await sql`create index if not exists mascot_messages_member on mascot_messages (member_id, created_at desc)`
+  // だれのアクションで届いたお便りか（紹介・手伝える・コメント・乾杯）
+  await sql`alter table mascot_messages add column if not exists actor_id uuid references members(id) on delete cascade`
+  // 同じ人・同じ宣言・同じ種類のお知らせは1回だけ（コメントは毎回）
+  await sql`create unique index if not exists mascot_messages_reaction_once
+    on mascot_messages (member_id, decl_id, kind, actor_id)
+    where kind in ('intro', 'help', 'cheer')`
+  await sql`create table if not exists push_subscriptions (
+    endpoint text primary key,
+    member_id uuid not null references members(id) on delete cascade,
+    p256dh text not null,
+    auth text not null,
+    created_at timestamptz not null default now()
+  )`
 }
 
 /** Returns the SQL client, creating the tables once per server instance. */

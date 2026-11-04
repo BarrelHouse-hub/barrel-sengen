@@ -11,6 +11,7 @@
 - **報告**: 自分の宣言を「達成した」「できなかった」で報告。達成旅行と「なんでできなかったんだろうね会」
 - **宣言の詳細**: コメント・ツッコミ、手を挙げた人の一覧
 - **登録**: ニックネームと合言葉だけ（合言葉はお店で口頭で伝える）
+- **たるまる（マスコット・仮）**: 宣言の「進捗どう？」、期限まぢか・期限切れのひと声、達成のお祝い、好みに合うほかの人の宣言の紹介を「お便り」で届ける。通知をオンにするとスマホにも届く（iPhone はホーム画面に追加したアプリから）
 
 ## 技術
 
@@ -34,6 +35,8 @@ npm run dev
 | `DATABASE_URL` | Neon の接続先（Neon 連携で自動設定） |
 | `BARREL_PASSCODE` | 登録の合言葉 |
 | `SESSION_SECRET` | ログインのクッキーに署名する鍵 |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | スマホ通知（Web Push）の鍵 |
+| `CRON_SECRET` | 毎日のお便り作成（Vercel Cron）を呼べるのを Vercel だけにする合言葉 |
 
 ## 開発の進め方
 
@@ -51,3 +54,6 @@ npm run dev
 | `src/lib/data.ts` | 読み込みのクエリ |
 | `src/lib/session.ts` | ログイン状態 |
 | `src/proxy.ts` | 未ログインなら登録画面へ回す |
+| `src/lib/mascot.ts` | たるまるのセリフと、いつ何を届けるかのルール |
+| `src/app/api/cron/mascot/` | 毎日 19:00（日本時間）に全員分のお便りを作って通知する（`vercel.json`） |
+| `public/sw.js` | スマホ通知を受け取る Service Worker |
