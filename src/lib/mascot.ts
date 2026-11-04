@@ -6,7 +6,19 @@ import { MASCOT_NAME } from './mascot-name'
 /** バレルハウスのマスコット（仮）「たるまる」。樽の子。関西弁でゆるく応援する。 */
 export { MASCOT_NAME }
 
-export type MascotKind = 'welcome' | 'progress' | 'due_soon' | 'overdue' | 'done' | 'recommend' | 'nudge'
+export type MascotKind =
+  | 'welcome'
+  | 'progress'
+  | 'due_soon'
+  | 'overdue'
+  | 'done'
+  | 'recommend'
+  | 'nudge'
+  // 自分の宣言にだれかが反応したお知らせ
+  | 'intro'
+  | 'help'
+  | 'comment'
+  | 'cheer'
 
 export type MascotMessage = {
   id: string
@@ -46,6 +58,13 @@ export const say = {
       ? `${cat}が好きなあなたに。${name}さんの「${what}」、「${need}」を探してるみたいやで。力になれそうなら手挙げてみ。`
       : `${cat}が好きなあなたに。${name}さんの「${what}」、乾杯で応援してみぃひん？`,
   nudge: () => `まだ宣言がないみたい。仕事でも趣味でも恋愛でも、ひとつ書いてみぃひん？小さいことでええねん。`,
+  intro: (name: string, what: string) =>
+    `${name}さんが「${what}」に、知り合いを紹介できるって手を挙げてくれたで！詳しく聞いてみ。`,
+  help: (name: string, what: string) =>
+    `${name}さんが「${what}」に、手伝えるって手を挙げてくれたで！心強いなあ。声かけてみ。`,
+  comment: (name: string, what: string, body: string) =>
+    `${name}さんが「${what}」にコメントしてくれたで。「${body.length > 30 ? `${body.slice(0, 30)}…` : body}」`,
+  cheer: (name: string, what: string) => `${name}さんが「${what}」に乾杯してくれたで！応援してくれる人がおるって、ええなあ。`,
 }
 
 type NewMsg = { kind: MascotKind; decl_id: string | null; body: string }

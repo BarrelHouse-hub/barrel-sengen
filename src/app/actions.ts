@@ -3,12 +3,14 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
 import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
 import { saveMessages, say } from '@/lib/mascot'
 import { pushTo } from '@/lib/push'
+import { notifyReaction } from '@/lib/notify'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v)
@@ -79,7 +81,10 @@ export async function toggleCheer(form: FormData) {
   const sql = await db()
   const del = (await sql`delete from cheers where decl_id = ${id} and member_id = ${me.id} returning 1`) as unknown[]
   if (del.length === 0) {
-    await sql`insert into cheers (decl_id, member_id) values (${id}, ${me.id}) on conflict do nothing`
+    const added = (await sql`
+      insert into cheers (decl_id, member_id) values (${id}, ${me.id}) on conflict do nothing returning 1
+    `) as unknown[]
+    if (added.length > 0) after(() => notifyReaction(id, me.id, { kind: 'cheer' }))
   }
   revalidatePath('/', 'layout')
 }
@@ -94,12 +99,14 @@ export async function toggleOffer(form: FormData) {
     delete from offers where decl_id = ${id} and member_id = ${me.id} and kind = ${kind} returning 1
   `) as unknown[]
   if (del.length === 0) {
-    await sql`
+    const added = (await sql`
       insert into offers (decl_id, member_id, kind)
       select ${id}, ${me.id}, ${kind}
       where exists (select 1 from declarations where id = ${id} and member_id <> ${me.id})
       on conflict do nothing
-    `
+      returning 1
+    `) as unknown[]
+    if (added.length > 0) after(() => notifyReaction(id, me.id, { kind }))
   }
   revalidatePath('/', 'layout')
 }
@@ -111,6 +118,7 @@ export async function addComment(form: FormData) {
   if (!isUuid(id) || !body) return
   const sql = await db()
   await sql`insert into comments (decl_id, member_id, body) values (${id}, ${me.id}, ${body})`
+  after(() => notifyReaction(id, me.id, { kind: 'comment', body }))
   revalidatePath('/', 'layout')
 }
 
