@@ -62,7 +62,7 @@ export function NavBar({ path }: { path: string | null }) {
       className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-line bg-deep px-1 pt-1.5 pb-[max(env(safe-area-inset-bottom),10px)]"
     >
       {items.map((it) => {
-        const active = path == null ? false : it.href === '/' ? path === '/' || path.startsWith('/d/') : path.startsWith(it.href)
+        const active = path == null ? false : it.href === '/' ? path === '/' || path.startsWith('/d/') || path.startsWith('/mascot') : path.startsWith(it.href)
         return (
           <Link
             key={it.href}

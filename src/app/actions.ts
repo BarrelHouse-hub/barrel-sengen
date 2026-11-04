@@ -7,6 +7,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
 import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
+import { saveMessages, say } from '@/lib/mascot'
+import { pushTo } from '@/lib/push'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v)
@@ -31,8 +33,11 @@ export async function join(_prev: JoinState, form: FormData): Promise<JoinState>
   const rows = (await sql`
     insert into members (name) values (${name})
     on conflict (name) do update set name = excluded.name
-    returning id
-  `) as { id: string }[]
+    returning id, (xmax = 0) as created
+  `) as { id: string; created: boolean }[]
+  if (rows[0].created) {
+    await saveMessages(rows[0].id, [{ kind: 'welcome', decl_id: null, body: say.welcome(name) }])
+  }
   ;(await cookies()).set(SESSION_COOKIE, makeToken(rows[0].id), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -116,11 +121,16 @@ export async function setStatus(form: FormData) {
   const status = raw === 'done' || raw === 'miss' ? raw : 'doing'
   if (!isUuid(id)) return
   const sql = await db()
-  await sql`
+  const rows = (await sql`
     update declarations
     set status = ${status}, reported_at = case when ${status} = 'doing' then null else now() end
     where id = ${id} and member_id = ${me.id}
-  `
+    returning what
+  `) as { what: string }[]
+  if (rows[0] && status === 'done') {
+    const msgs = await saveMessages(me.id, [{ kind: 'done', decl_id: id, body: say.done(rows[0].what) }])
+    await pushTo(me.id, msgs)
+  }
   revalidatePath('/', 'layout')
 }
 
@@ -132,4 +142,34 @@ export async function deleteDecl(form: FormData) {
   await sql`delete from declarations where id = ${id} and member_id = ${me.id}`
   revalidatePath('/', 'layout')
   redirect('/')
+}
+
+export async function markMascotRead() {
+  const me = await requireMe()
+  const sql = await db()
+  // 開いている画面の「新着」表示は残したいので、ここでは再描画しない
+  await sql`update mascot_messages set read_at = now() where member_id = ${me.id} and read_at is null`
+}
+
+type PushSub = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }
+
+export async function savePushSubscription(sub: PushSub) {
+  const me = await requireMe()
+  const endpoint = typeof sub?.endpoint === 'string' ? sub.endpoint : ''
+  const p256dh = typeof sub?.keys?.p256dh === 'string' ? sub.keys.p256dh : ''
+  const auth = typeof sub?.keys?.auth === 'string' ? sub.keys.auth : ''
+  if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth) throw new Error('通知の登録に失敗しました')
+  const sql = await db()
+  await sql`
+    insert into push_subscriptions (endpoint, member_id, p256dh, auth)
+    values (${endpoint}, ${me.id}, ${p256dh.slice(0, 200)}, ${auth.slice(0, 100)})
+    on conflict (endpoint) do update set member_id = excluded.member_id, p256dh = excluded.p256dh, auth = excluded.auth
+  `
+}
+
+export async function deletePushSubscription(endpoint: string) {
+  const me = await requireMe()
+  if (typeof endpoint !== 'string') return
+  const sql = await db()
+  await sql`delete from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}`
 }
