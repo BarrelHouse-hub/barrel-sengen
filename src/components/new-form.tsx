@@ -22,7 +22,7 @@ export function NewForm({ initialWhat, error }: { initialWhat: string; error: bo
   const [mode, setMode] = useState('gachi')
   const [cat, setCat] = useState('work')
   const ready = what.trim().length > 0
-  const dueLabel = due ? due.replaceAll('-', '/') : '期限なし'
+  const dueLabel = due ? due.replaceAll('-', '/') : 'なし'
 
   return (
     <form action={createDecl} className="flex flex-col gap-4">

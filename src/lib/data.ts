@@ -74,7 +74,7 @@ export async function listComments(declId: string) {
 }
 
 export function formatDue(due: string | null) {
-  if (!due) return '期限なし'
+  if (!due) return 'なし'
   const [y, m, d] = due.split('-').map(Number)
   const thisYear = new Date().getFullYear()
   return y === thisYear ? `${m}/${d}` : `${y}/${m}/${d}`
