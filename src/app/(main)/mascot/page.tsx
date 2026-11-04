@@ -33,6 +33,10 @@ const LABEL: Record<string, string> = {
   done: 'おめでとう',
   recommend: 'おすすめ',
   nudge: 'ひと声',
+  intro: '紹介できるで',
+  help: '手伝えるで',
+  comment: 'コメント',
+  cheer: '乾杯',
 }
 
 function when(iso: string) {
