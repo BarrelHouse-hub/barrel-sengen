@@ -41,6 +41,13 @@ async function migrate(sql: NeonQueryFunction<false, false>) {
     body text not null,
     created_at timestamptz not null default now()
   )`
+  await sql`create table if not exists push_subscriptions (
+    endpoint text primary key,
+    member_id uuid not null references members(id) on delete cascade,
+    p256dh text not null,
+    auth text not null,
+    created_at timestamptz not null default now()
+  )`
 }
 
 /** Returns the SQL client, creating the tables once per server instance. */

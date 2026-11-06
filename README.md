@@ -11,6 +11,8 @@
 - **報告**: 自分の宣言を「達成した」「できなかった」で報告。達成旅行と「なんでできなかったんだろうね会」
 - **宣言の詳細**: コメント・ツッコミ、手を挙げた人の一覧
 - **登録**: ニックネームと合言葉だけ（合言葉はお店で口頭で伝える）
+- **アプリとして使う**: ボードにホーム画面への追加方法を案内。圏外のときは案内ページを表示
+- **通知**: 自分の宣言に乾杯・手を挙げる・コメントがあるとプッシュ通知（「報告」画面でオン／オフ。iPhone はホーム画面に追加した人だけ）
 
 ## 技術
 
@@ -34,6 +36,9 @@ npm run dev
 | `DATABASE_URL` | Neon の接続先（Neon 連携で自動設定） |
 | `BARREL_PASSCODE` | 登録の合言葉 |
 | `SESSION_SECRET` | ログインのクッキーに署名する鍵 |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | プッシュ通知の公開鍵（`npx web-push generate-vapid-keys` で作る。未設定なら通知は無効） |
+| `VAPID_PRIVATE_KEY` | プッシュ通知の秘密鍵 |
+| `VAPID_SUBJECT` | 通知の送信元（`mailto:...` か `https://...`。未設定ならサイトの URL） |
 
 ## 開発の進め方
 
@@ -51,3 +56,5 @@ npm run dev
 | `src/lib/data.ts` | 読み込みのクエリ |
 | `src/lib/session.ts` | ログイン状態 |
 | `src/proxy.ts` | 未ログインなら登録画面へ回す |
+| `src/lib/push.ts` | プッシュ通知の送信 |
+| `public/sw.js` | Service Worker（圏外の案内・通知の受信） |

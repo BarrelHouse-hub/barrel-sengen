@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
-import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
+import { getMe, makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
+import { isPushEndpoint, notifyDeclOwner } from '@/lib/push'
 import { isCat } from '@/lib/data'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -43,7 +44,13 @@ export async function join(_prev: JoinState, form: FormData): Promise<JoinState>
   redirect('/')
 }
 
-export async function logout() {
+export async function logout(form?: FormData) {
+  const endpoint = form ? str(form, 'endpoint', 1000) : ''
+  const me = endpoint ? await getMe() : null
+  if (me) {
+    const sql = await db()
+    await sql`delete from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}`
+  }
   ;(await cookies()).delete(SESSION_COOKIE)
   redirect('/join')
 }
@@ -74,7 +81,13 @@ export async function toggleCheer(form: FormData) {
   const sql = await db()
   const del = (await sql`delete from cheers where decl_id = ${id} and member_id = ${me.id} returning 1`) as unknown[]
   if (del.length === 0) {
-    await sql`insert into cheers (decl_id, member_id) values (${id}, ${me.id}) on conflict do nothing`
+    const added = (await sql`
+      insert into cheers (decl_id, member_id) values (${id}, ${me.id}) on conflict do nothing returning 1
+    `) as unknown[]
+    if (added.length > 0) {
+      // 乾杯のやり直しで通知が積み重ならないよう、同じ tag でまとめる
+      notifyDeclOwner(id, me, (what) => ({ title: `${me.name} さんが乾杯しました`, body: what, tag: `cheer-${id}-${me.id}` }))
+    }
   }
   revalidatePath('/', 'layout')
 }
@@ -89,12 +102,21 @@ export async function toggleOffer(form: FormData) {
     delete from offers where decl_id = ${id} and member_id = ${me.id} and kind = ${kind} returning 1
   `) as unknown[]
   if (del.length === 0) {
-    await sql`
+    const added = (await sql`
       insert into offers (decl_id, member_id, kind)
       select ${id}, ${me.id}, ${kind}
       where exists (select 1 from declarations where id = ${id} and member_id <> ${me.id})
       on conflict do nothing
-    `
+      returning 1
+    `) as unknown[]
+    if (added.length > 0) {
+      const label = kind === 'intro' ? '知り合いを紹介' : '手伝える'
+      notifyDeclOwner(id, me, (what) => ({
+        title: `${me.name} さんが「${label}」と手を挙げました`,
+        body: what,
+        tag: `offer-${id}-${me.id}-${kind}`,
+      }))
+    }
   }
   revalidatePath('/', 'layout')
 }
@@ -106,6 +128,7 @@ export async function addComment(form: FormData) {
   if (!isUuid(id) || !body) return
   const sql = await db()
   await sql`insert into comments (decl_id, member_id, body) values (${id}, ${me.id}, ${body})`
+  notifyDeclOwner(id, me, () => ({ title: `${me.name} さんがコメントしました`, body }))
   revalidatePath('/', 'layout')
 }
 
@@ -132,4 +155,26 @@ export async function deleteDecl(form: FormData) {
   await sql`delete from declarations where id = ${id} and member_id = ${me.id}`
   revalidatePath('/', 'layout')
   redirect('/')
+}
+
+export async function savePush(input: { endpoint: string; p256dh: string; auth: string }) {
+  const me = await requireMe()
+  const endpoint = String(input.endpoint ?? '')
+  const p256dh = String(input.p256dh ?? '')
+  const auth = String(input.auth ?? '')
+  if (endpoint.length > 1000 || !isPushEndpoint(endpoint)) return false
+  if (!p256dh || p256dh.length > 200 || !auth || auth.length > 100) return false
+  const sql = await db()
+  await sql`
+    insert into push_subscriptions (endpoint, member_id, p256dh, auth)
+    values (${endpoint}, ${me.id}, ${p256dh}, ${auth})
+    on conflict (endpoint) do update set member_id = excluded.member_id, p256dh = excluded.p256dh, auth = excluded.auth
+  `
+  return true
+}
+
+export async function removePush(endpoint: string) {
+  const me = await requireMe()
+  const sql = await db()
+  await sql`delete from push_subscriptions where endpoint = ${String(endpoint ?? '')} and member_id = ${me.id}`
 }
