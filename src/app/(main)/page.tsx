@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { CardsSkeleton, DeclCard } from '@/components/decl-card'
+import { InstallBanner } from '@/components/install-banner'
 import { MascotCard } from '@/components/mascot-card'
 import { CATS, listDecls } from '@/lib/data'
 import { requireMe } from '@/lib/session'
@@ -11,6 +12,7 @@ export default function BoardPage(props: PageProps<'/'>) {
     <>
       <Header title="宣言ボード" />
       <main className="flex flex-1 flex-col gap-3.5 px-4 pt-4 pb-6">
+        <InstallBanner />
         <Suspense fallback={<CardsSkeleton />}>
           <Board searchParams={props.searchParams} />
         </Suspense>

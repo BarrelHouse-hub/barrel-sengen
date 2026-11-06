@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Yuji_Syuku, Zen_Kaku_Gothic_New } from 'next/font/google'
+import { ServiceWorker } from '@/components/service-worker'
 import './globals.css'
 
 const hand = Yuji_Syuku({ weight: '400', subsets: ['latin'], preload: false, variable: '--font-hand-src' })
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
     <html lang="ja" className={`${hand.variable} ${ui.variable} antialiased`}>
       <body className="font-sans">
         <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-ground">{children}</div>
+        <ServiceWorker />
       </body>
     </html>
   )

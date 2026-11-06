@@ -9,7 +9,7 @@ import { db } from '@/lib/db'
 import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
 import { saveMessages, say } from '@/lib/mascot'
-import { pushTo } from '@/lib/push'
+import { isPushEndpoint, pushTo } from '@/lib/push'
 import { notifyReaction } from '@/lib/notify'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -166,7 +166,7 @@ export async function savePushSubscription(sub: PushSub) {
   const endpoint = typeof sub?.endpoint === 'string' ? sub.endpoint : ''
   const p256dh = typeof sub?.keys?.p256dh === 'string' ? sub.keys.p256dh : ''
   const auth = typeof sub?.keys?.auth === 'string' ? sub.keys.auth : ''
-  if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth) throw new Error('通知の登録に失敗しました')
+  if (!isPushEndpoint(endpoint) || endpoint.length > 1000 || !p256dh || !auth) throw new Error('通知の登録に失敗しました')
   const sql = await db()
   await sql`
     insert into push_subscriptions (endpoint, member_id, p256dh, auth)

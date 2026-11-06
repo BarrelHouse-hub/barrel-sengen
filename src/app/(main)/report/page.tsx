@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { CardsSkeleton, CheerButton } from '@/components/decl-card'
-import { logout } from '@/app/actions'
+import { LogoutForm } from '@/components/logout-form'
 import { CAT_LABEL, formatDue, listDecls } from '@/lib/data'
 import { requireMe } from '@/lib/session'
 
@@ -97,12 +97,7 @@ async function Report() {
         </article>
       ))}
 
-      <form action={logout} className="mt-6 flex items-center justify-center gap-2 text-xs text-faint">
-        <span>{me.name} としてログイン中</span>
-        <button type="submit" className="min-h-11 px-2 text-muted underline underline-offset-2">
-          ログアウト
-        </button>
-      </form>
+      <LogoutForm name={me.name} />
     </>
   )
 }

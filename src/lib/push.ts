@@ -3,6 +3,18 @@ import webpush from 'web-push'
 import { db } from './db'
 import { MASCOT_NAME, type MascotMessage } from './mascot'
 
+const PUSH_HOSTS = ['fcm.googleapis.com', '.push.services.mozilla.com', '.push.apple.com', '.notify.windows.com']
+
+/** サーバーから任意の URL へ送らされないよう、ブラウザのプッシュサービスだけ通す */
+export function isPushEndpoint(value: string) {
+  try {
+    const { protocol, hostname } = new URL(value)
+    return protocol === 'https:' && PUSH_HOSTS.some((h) => (h.startsWith('.') ? hostname.endsWith(h) : hostname === h))
+  } catch {
+    return false
+  }
+}
+
 let configured: boolean | null = null
 
 function configure() {
