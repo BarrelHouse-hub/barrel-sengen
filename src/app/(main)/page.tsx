@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { CardsSkeleton, DeclCard } from '@/components/decl-card'
 import { InstallBanner } from '@/components/install-banner'
+import { MascotCard } from '@/components/mascot-card'
 import { CATS, listDecls } from '@/lib/data'
 import { requireMe } from '@/lib/session'
 
@@ -31,6 +32,7 @@ async function Board({ searchParams }: { searchParams: PageProps<'/'>['searchPar
 
   return (
     <>
+      <MascotCard memberId={me.id} />
       <div className="flex items-center justify-between text-xs text-muted">
         <span>挑戦中 {doing} 件</span>
         <span>{me.name} さん</span>

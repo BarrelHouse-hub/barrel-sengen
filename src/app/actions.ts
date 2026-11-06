@@ -3,11 +3,14 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
-import { getMe, makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
-import { isPushEndpoint, notifyDeclOwner } from '@/lib/push'
+import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
+import { saveMessages, say } from '@/lib/mascot'
+import { isPushEndpoint, pushTo } from '@/lib/push'
+import { notifyReaction } from '@/lib/notify'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v)
@@ -32,8 +35,11 @@ export async function join(_prev: JoinState, form: FormData): Promise<JoinState>
   const rows = (await sql`
     insert into members (name) values (${name})
     on conflict (name) do update set name = excluded.name
-    returning id
-  `) as { id: string }[]
+    returning id, (xmax = 0) as created
+  `) as { id: string; created: boolean }[]
+  if (rows[0].created) {
+    await saveMessages(rows[0].id, [{ kind: 'welcome', decl_id: null, body: say.welcome(name) }])
+  }
   ;(await cookies()).set(SESSION_COOKIE, makeToken(rows[0].id), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -44,13 +50,7 @@ export async function join(_prev: JoinState, form: FormData): Promise<JoinState>
   redirect('/')
 }
 
-export async function logout(form?: FormData) {
-  const endpoint = form ? str(form, 'endpoint', 1000) : ''
-  const me = endpoint ? await getMe() : null
-  if (me) {
-    const sql = await db()
-    await sql`delete from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}`
-  }
+export async function logout() {
   ;(await cookies()).delete(SESSION_COOKIE)
   redirect('/join')
 }
@@ -84,10 +84,7 @@ export async function toggleCheer(form: FormData) {
     const added = (await sql`
       insert into cheers (decl_id, member_id) values (${id}, ${me.id}) on conflict do nothing returning 1
     `) as unknown[]
-    if (added.length > 0) {
-      // 乾杯のやり直しで通知が積み重ならないよう、同じ tag でまとめる
-      notifyDeclOwner(id, me, (what) => ({ title: `${me.name} さんが乾杯しました`, body: what, tag: `cheer-${id}-${me.id}` }))
-    }
+    if (added.length > 0) after(() => notifyReaction(id, me.id, { kind: 'cheer' }))
   }
   revalidatePath('/', 'layout')
 }
@@ -109,14 +106,7 @@ export async function toggleOffer(form: FormData) {
       on conflict do nothing
       returning 1
     `) as unknown[]
-    if (added.length > 0) {
-      const label = kind === 'intro' ? '知り合いを紹介' : '手伝える'
-      notifyDeclOwner(id, me, (what) => ({
-        title: `${me.name} さんが「${label}」と手を挙げました`,
-        body: what,
-        tag: `offer-${id}-${me.id}-${kind}`,
-      }))
-    }
+    if (added.length > 0) after(() => notifyReaction(id, me.id, { kind }))
   }
   revalidatePath('/', 'layout')
 }
@@ -128,7 +118,7 @@ export async function addComment(form: FormData) {
   if (!isUuid(id) || !body) return
   const sql = await db()
   await sql`insert into comments (decl_id, member_id, body) values (${id}, ${me.id}, ${body})`
-  notifyDeclOwner(id, me, () => ({ title: `${me.name} さんがコメントしました`, body }))
+  after(() => notifyReaction(id, me.id, { kind: 'comment', body }))
   revalidatePath('/', 'layout')
 }
 
@@ -139,11 +129,16 @@ export async function setStatus(form: FormData) {
   const status = raw === 'done' || raw === 'miss' ? raw : 'doing'
   if (!isUuid(id)) return
   const sql = await db()
-  await sql`
+  const rows = (await sql`
     update declarations
     set status = ${status}, reported_at = case when ${status} = 'doing' then null else now() end
     where id = ${id} and member_id = ${me.id}
-  `
+    returning what
+  `) as { what: string }[]
+  if (rows[0] && status === 'done') {
+    const msgs = await saveMessages(me.id, [{ kind: 'done', decl_id: id, body: say.done(rows[0].what) }])
+    await pushTo(me.id, msgs)
+  }
   revalidatePath('/', 'layout')
 }
 
@@ -157,24 +152,32 @@ export async function deleteDecl(form: FormData) {
   redirect('/')
 }
 
-export async function savePush(input: { endpoint: string; p256dh: string; auth: string }) {
+export async function markMascotRead() {
   const me = await requireMe()
-  const endpoint = String(input.endpoint ?? '')
-  const p256dh = String(input.p256dh ?? '')
-  const auth = String(input.auth ?? '')
-  if (endpoint.length > 1000 || !isPushEndpoint(endpoint)) return false
-  if (!p256dh || p256dh.length > 200 || !auth || auth.length > 100) return false
+  const sql = await db()
+  // 開いている画面の「新着」表示は残したいので、ここでは再描画しない
+  await sql`update mascot_messages set read_at = now() where member_id = ${me.id} and read_at is null`
+}
+
+type PushSub = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }
+
+export async function savePushSubscription(sub: PushSub) {
+  const me = await requireMe()
+  const endpoint = typeof sub?.endpoint === 'string' ? sub.endpoint : ''
+  const p256dh = typeof sub?.keys?.p256dh === 'string' ? sub.keys.p256dh : ''
+  const auth = typeof sub?.keys?.auth === 'string' ? sub.keys.auth : ''
+  if (!isPushEndpoint(endpoint) || endpoint.length > 1000 || !p256dh || !auth) throw new Error('通知の登録に失敗しました')
   const sql = await db()
   await sql`
     insert into push_subscriptions (endpoint, member_id, p256dh, auth)
-    values (${endpoint}, ${me.id}, ${p256dh}, ${auth})
+    values (${endpoint}, ${me.id}, ${p256dh.slice(0, 200)}, ${auth.slice(0, 100)})
     on conflict (endpoint) do update set member_id = excluded.member_id, p256dh = excluded.p256dh, auth = excluded.auth
   `
-  return true
 }
 
-export async function removePush(endpoint: string) {
+export async function deletePushSubscription(endpoint: string) {
   const me = await requireMe()
+  if (typeof endpoint !== 'string') return
   const sql = await db()
-  await sql`delete from push_subscriptions where endpoint = ${String(endpoint ?? '')} and member_id = ${me.id}`
+  await sql`delete from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}`
 }

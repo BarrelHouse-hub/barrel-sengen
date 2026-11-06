@@ -12,7 +12,7 @@
 - **宣言の詳細**: コメント・ツッコミ、手を挙げた人の一覧
 - **登録**: ニックネームと合言葉だけ（合言葉はお店で口頭で伝える）
 - **アプリとして使う**: ボードにホーム画面への追加方法を案内。圏外のときは案内ページを表示
-- **通知**: 自分の宣言に乾杯・手を挙げる・コメントがあるとプッシュ通知（「報告」画面でオン／オフ。iPhone はホーム画面に追加した人だけ）
+- **たるまる（マスコット・仮）**: 宣言の「進捗どう？」、期限まぢか・期限切れのひと声、達成のお祝い、好みに合うほかの人の宣言の紹介を「お便り」で届ける。通知をオンにするとスマホにも届く（iPhone はホーム画面に追加したアプリから）
 
 ## 技術
 
@@ -36,9 +36,8 @@ npm run dev
 | `DATABASE_URL` | Neon の接続先（Neon 連携で自動設定） |
 | `BARREL_PASSCODE` | 登録の合言葉 |
 | `SESSION_SECRET` | ログインのクッキーに署名する鍵 |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | プッシュ通知の公開鍵（`npx web-push generate-vapid-keys` で作る。未設定なら通知は無効） |
-| `VAPID_PRIVATE_KEY` | プッシュ通知の秘密鍵 |
-| `VAPID_SUBJECT` | 通知の送信元（`mailto:...` か `https://...`。未設定ならサイトの URL） |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | スマホ通知（Web Push）の鍵 |
+| `CRON_SECRET` | 毎日のお便り作成（Vercel Cron）を呼べるのを Vercel だけにする合言葉 |
 
 ## 開発の進め方
 
@@ -56,5 +55,6 @@ npm run dev
 | `src/lib/data.ts` | 読み込みのクエリ |
 | `src/lib/session.ts` | ログイン状態 |
 | `src/proxy.ts` | 未ログインなら登録画面へ回す |
-| `src/lib/push.ts` | プッシュ通知の送信 |
-| `public/sw.js` | Service Worker（圏外の案内・通知の受信） |
+| `src/lib/mascot.ts` | たるまるのセリフと、いつ何を届けるかのルール |
+| `src/app/api/cron/mascot/` | 毎日 19:00（日本時間）に全員分のお便りを作って通知する（`vercel.json`） |
+| `public/sw.js` | スマホ通知の受信と、圏外の案内ページを出す Service Worker |

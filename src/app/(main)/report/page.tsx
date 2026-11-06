@@ -3,7 +3,6 @@ import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { CardsSkeleton, CheerButton } from '@/components/decl-card'
 import { LogoutForm } from '@/components/logout-form'
-import { NotifyToggle } from '@/components/notify-toggle'
 import { CAT_LABEL, formatDue, listDecls } from '@/lib/data'
 import { requireMe } from '@/lib/session'
 
@@ -98,7 +97,6 @@ async function Report() {
         </article>
       ))}
 
-      <NotifyToggle />
       <LogoutForm name={me.name} />
     </>
   )

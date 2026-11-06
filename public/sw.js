@@ -1,5 +1,5 @@
 // バレルハウス 宣言ボードの Service Worker
-// やること: 圏外のときの案内ページを出す / プッシュ通知を受けて表示する
+// やること: 圏外のときの案内ページを出す / たるまるからのお便り通知を表示する
 const CACHE = 'barrel-offline-v1'
 const OFFLINE_URL = '/offline.html'
 
@@ -32,30 +32,29 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {}
   } catch {
-    // 形式が違うときは既定の文言で出す
+    data = { body: event.data ? event.data.text() : '' }
   }
+  const title = data.title || 'たるまるから'
   event.waitUntil(
-    self.registration.showNotification(data.title || '宣言ボード', {
+    self.registration.showNotification(title, {
       body: data.body || '',
-      icon: '/icon-192',
-      badge: '/icon-192',
-      tag: data.tag,
-      data: { url: data.url || '/' },
+      icon: '/icon',
+      badge: '/icon',
+      data: { url: data.url || '/mascot' },
     }),
   )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  // 同じサイト内のページだけ開く
-  const target = new URL(event.notification.data?.url || '/', self.location.origin)
-  const url = target.origin === self.location.origin ? target.href : self.location.origin + '/'
+  const url = (event.notification.data && event.notification.data.url) || '/mascot'
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
-      const open = list.find((c) => new URL(c.url).origin === self.location.origin)
-      if (open) {
-        await open.focus()
-        return open.navigate(url)
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          c.navigate(url)
+          return c.focus()
+        }
       }
       return self.clients.openWindow(url)
     }),

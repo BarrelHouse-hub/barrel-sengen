@@ -1,21 +1,21 @@
 'use client'
 
-import { logout } from '@/app/actions'
-import { currentSubscription } from '@/lib/push-client'
+import { deletePushSubscription, logout } from '@/app/actions'
 
 // 同じ端末で別の人がログインしたときに、前の人の通知が届かないよう解除してから出る
 export function LogoutForm({ name }: { name: string }) {
-  async function action(form: FormData) {
+  async function action() {
     try {
-      const sub = await currentSubscription()
+      const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined
+      const sub = await reg?.pushManager.getSubscription()
       if (sub) {
-        form.set('endpoint', sub.endpoint)
+        await deletePushSubscription(sub.endpoint)
         await sub.unsubscribe()
       }
     } catch (e) {
       console.error('通知の解除に失敗', e)
     }
-    await logout(form)
+    await logout()
   }
 
   return (

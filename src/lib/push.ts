@@ -1,11 +1,7 @@
 import 'server-only'
-import { sendNotification, setVapidDetails } from 'web-push'
-import { after } from 'next/server'
+import webpush from 'web-push'
 import { db } from './db'
-import type { Me } from './session'
-
-export type PushPayload = { title: string; body: string; url: string; tag?: string }
-type Sub = { endpoint: string; p256dh: string; auth: string }
+import { MASCOT_NAME, type MascotMessage } from './mascot'
 
 const PUSH_HOSTS = ['fcm.googleapis.com', '.push.services.mozilla.com', '.push.apple.com', '.notify.windows.com']
 
@@ -19,59 +15,35 @@ export function isPushEndpoint(value: string) {
   }
 }
 
-function configured() {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-  const privateKey = process.env.VAPID_PRIVATE_KEY
-  if (!publicKey || !privateKey) return false
-  setVapidDetails(process.env.VAPID_SUBJECT || 'https://barrel-sengen.vercel.app', publicKey, privateKey)
-  return true
+let configured: boolean | null = null
+
+function configure() {
+  if (configured !== null) return configured
+  const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const priv = process.env.VAPID_PRIVATE_KEY
+  if (!pub || !priv) return (configured = false)
+  webpush.setVapidDetails('https://barrel-sengen.vercel.app', pub, priv)
+  return (configured = true)
 }
 
-async function pushTo(memberId: string, payload: PushPayload) {
+/** その人が通知をオンにしている端末すべてに、お便りが届いたことを知らせる。 */
+export async function pushTo(memberId: string, messages: Pick<MascotMessage, 'body'>[]) {
+  if (messages.length === 0 || !configure()) return
   const sql = await db()
   const subs = (await sql`
     select endpoint, p256dh, auth from push_subscriptions where member_id = ${memberId}
-  `) as Sub[]
+  `) as { endpoint: string; p256dh: string; auth: string }[]
+  const body = messages.length === 1 ? messages[0].body : `${messages[0].body}（ほか${messages.length - 1}通）`
+  const payload = JSON.stringify({ title: `${MASCOT_NAME}から`, body, url: '/mascot' })
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify(payload),
-          { TTL: 60 * 60 * 24 },
-        )
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload)
       } catch (e) {
-        const status = (e as { statusCode?: number }).statusCode
-        if (status === 404 || status === 410) {
-          // 通知をやめた端末なので消す
-          await sql`delete from push_subscriptions where endpoint = ${s.endpoint}`
-        } else {
-          console.error('プッシュ通知の送信に失敗', status)
-        }
+        const code = (e as { statusCode?: number }).statusCode
+        if (code === 404 || code === 410) await sql`delete from push_subscriptions where endpoint = ${s.endpoint}`
+        else console.error('push failed', code)
       }
     }),
   )
-}
-
-/** 宣言の持ち主に通知する。画面の応答は待たせず、自分の宣言への操作では送らない。 */
-export function notifyDeclOwner(
-  declId: string,
-  actor: Me,
-  build: (what: string) => Omit<PushPayload, 'url'>,
-) {
-  if (!configured()) return
-  after(async () => {
-    try {
-      const sql = await db()
-      const rows = (await sql`select member_id, what from declarations where id = ${declId}`) as {
-        member_id: string
-        what: string
-      }[]
-      const decl = rows[0]
-      if (!decl || decl.member_id === actor.id) return
-      await pushTo(decl.member_id, { ...build(decl.what), url: `/d/${declId}` })
-    } catch (e) {
-      console.error('プッシュ通知の準備に失敗', e)
-    }
-  })
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { isIos, isStandalone } from '@/lib/push-client'
+import { isIos, isStandalone } from '@/lib/device'
 
 const DISMISS_KEY = 'bh_install_dismissed'
 
