@@ -9,7 +9,8 @@ import { db } from '@/lib/db'
 import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
 import { saveMessages, say } from '@/lib/mascot'
-import { isPushEndpoint, pushTo } from '@/lib/push'
+import { isPushEndpoint, pushTo, sendPush, type PushResult } from '@/lib/push'
+import { MASCOT_NAME } from '@/lib/mascot-name'
 import { notifyReaction } from '@/lib/notify'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -180,4 +181,25 @@ export async function deletePushSubscription(endpoint: string) {
   if (typeof endpoint !== 'string') return
   const sql = await db()
   await sql`delete from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}`
+}
+
+/** 登録した購読がサーバーに残っているか（鍵が合わず消された購読は、端末側でオンにし直してもらう） */
+export async function hasPushSubscription(endpoint: string) {
+  const me = await requireMe()
+  if (typeof endpoint !== 'string') return false
+  const sql = await db()
+  const rows = (await sql`
+    select 1 from push_subscriptions where endpoint = ${endpoint} and member_id = ${me.id}
+  `) as unknown[]
+  return rows.length > 0
+}
+
+/** 自分の端末にだけテスト通知を送る。 */
+export async function sendTestPush(): Promise<PushResult> {
+  const me = await requireMe()
+  return sendPush(me.id, {
+    title: `${MASCOT_NAME}から（テスト）`,
+    body: 'テスト通知やで。これが見えてたら、ちゃんと届いてる！',
+    url: '/mascot',
+  })
 }
