@@ -38,6 +38,11 @@ const LABEL: Record<string, string> = {
   comment: 'コメント',
   cheer: '乾杯',
   push_reset: '通知のこと',
+  round_start: 'ラウンド開始',
+  round_due3: '締め切りまぢか',
+  round_due1: '締め切りまぢか',
+  round_due0: '締め切り当日',
+  round_meetup: '報告会',
 }
 
 function when(iso: string) {
@@ -70,6 +75,10 @@ async function Letters() {
               {m.decl_id ? (
                 <Link href={`/d/${m.decl_id}`} className={`mt-1.5 inline-flex min-h-9 items-center text-xs font-bold underline underline-offset-2 ${m.read_at ? 'text-accent' : 'text-paper-ink'}`}>
                   {m.kind === 'recommend' ? 'その宣言を見る' : '自分の宣言を見る'}
+                </Link>
+              ) : m.kind === 'round_start' || m.kind === 'round_meetup' ? (
+                <Link href="/" className={`mt-1.5 inline-flex min-h-9 items-center text-xs font-bold underline underline-offset-2 ${m.read_at ? 'text-accent' : 'text-paper-ink'}`}>
+                  ボードで見る
                 </Link>
               ) : m.kind === 'nudge' || m.kind === 'welcome' ? (
                 <Link href="/new" className={`mt-1.5 inline-flex min-h-9 items-center text-xs font-bold underline underline-offset-2 ${m.read_at ? 'text-accent' : 'text-paper-ink'}`}>

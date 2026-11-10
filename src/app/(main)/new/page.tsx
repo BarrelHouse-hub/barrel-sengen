@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { NewForm } from '@/components/new-form'
+import { openRounds } from '@/lib/rounds'
 import { requireMe } from '@/lib/session'
 
 export default function NewPage(props: PageProps<'/new'>) {
@@ -20,5 +21,6 @@ async function Loader({ searchParams }: { searchParams: PageProps<'/new'>['searc
   await requireMe()
   const sp = await searchParams
   const what = typeof sp.what === 'string' ? sp.what.slice(0, 140) : ''
-  return <NewForm initialWhat={what} error={sp.e === 'empty'} />
+  const rounds = (await openRounds()).map((r) => ({ id: r.id, name: r.name, deadline: r.deadline }))
+  return <NewForm initialWhat={what} error={sp.e === 'empty'} rounds={rounds} />
 }

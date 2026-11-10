@@ -21,6 +21,12 @@ export type MascotKind =
   | 'cheer'
   // スマホ通知が使えなくなったので、オンにし直してほしい
   | 'push_reset'
+  // ラウンド（2週間サイクル）の告知・リマインド
+  | 'round_start'
+  | 'round_due3'
+  | 'round_due1'
+  | 'round_due0'
+  | 'round_meetup'
 
 export type MascotMessage = {
   id: string
