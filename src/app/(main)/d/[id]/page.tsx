@@ -6,6 +6,9 @@ import { CardsSkeleton, DeclCard } from '@/components/decl-card'
 import { addComment, deleteDecl, setStatus } from '@/app/actions'
 import { getDecl, listComments, listOffers } from '@/lib/data'
 import { requireMe } from '@/lib/session'
+import { SubmitForm } from '@/components/submit-form'
+import { todayJst } from '@/lib/rounds'
+import { submissionsFor } from '@/lib/submissions'
 
 export default function DeclPage(props: PageProps<'/d/[id]'>) {
   return (
@@ -37,14 +40,27 @@ async function Detail({ params }: { params: PageProps<'/d/[id]'>['params'] }) {
   const { id } = await params
   const d = await getDecl(me.id, id)
   if (!d) notFound()
-  const [offers, comments] = await Promise.all([listOffers(d.id), listComments(d.id)])
+  const [offers, comments, subs] = await Promise.all([listOffers(d.id), listComments(d.id), submissionsFor([d.id])])
+  const sub = subs.get(d.id)
   const mine = d.member_id === me.id
   const helpers = offers.filter((o) => o.kind === 'help').map((o) => o.name)
   const introducers = offers.filter((o) => o.kind === 'intro').map((o) => o.name)
 
   return (
     <>
-      <DeclCard d={d} meId={me.id} />
+      <DeclCard d={d} meId={me.id} sub={sub} />
+
+      {mine ? (
+        <section className="flex flex-col gap-2.5 rounded-xl border border-accent p-4">
+          <h2 className="text-sm font-bold">{sub ? '成果を出し直す' : '成果を提出'}</h2>
+          <SubmitForm
+            declId={d.id}
+            meId={me.id}
+            again={Boolean(sub)}
+            late={!sub && d.round_deadline !== null && todayJst() > d.round_deadline}
+          />
+        </section>
+      ) : null}
 
       {mine ? (
         <section className="flex flex-col gap-2.5 rounded-xl bg-surface p-4">

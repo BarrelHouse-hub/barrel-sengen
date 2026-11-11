@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { toggleCheer, toggleOffer } from '@/app/actions'
 import { CAT_LABEL, formatDue, type Decl } from '@/lib/data'
+import type { Submission } from '@/lib/submissions'
+import { SubmissionView } from './submission-view'
 
 export function Avatar({ name, className = '' }: { name: string; className?: string }) {
   return (
@@ -55,7 +57,7 @@ export function CheerButton({ d, size = 'sm' }: { d: Decl; size?: 'sm' | 'lg' })
   )
 }
 
-export function DeclCard({ d, meId }: { d: Decl; meId: string }) {
+export function DeclCard({ d, meId, sub }: { d: Decl; meId: string; sub?: Submission }) {
   const mine = d.member_id === meId
   return (
     <article className="relative flex flex-col gap-3 rounded-md bg-paper px-4 pt-4 pb-3.5 text-paper-ink shadow-[0_1px_0_#00000040]">
@@ -65,6 +67,7 @@ export function DeclCard({ d, meId }: { d: Decl; meId: string }) {
           <div className="text-sm font-bold">{d.name}</div>
           <div className="text-xs text-paper-muted">
             {CAT_LABEL[d.cat]} ・ 期限 {formatDue(d.due)}
+            {d.round_name ? ` ・ ${d.round_name}` : ''}
           </div>
         </div>
         <ModeTag mode={d.mode} />
@@ -74,6 +77,8 @@ export function DeclCard({ d, meId }: { d: Decl; meId: string }) {
         {d.what}
       </Link>
       <Stamp status={d.status} />
+
+      {sub ? <SubmissionView sub={sub} /> : null}
 
       {d.need && d.status === 'doing' ? (
         <div className="flex items-center gap-2.5 rounded-md bg-paper2 px-3 py-2.5">

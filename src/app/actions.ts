@@ -12,6 +12,8 @@ import { saveMessages, say } from '@/lib/mascot'
 import { isPushEndpoint, pushTo, sendPush, type PushResult } from '@/lib/push'
 import { MASCOT_NAME } from '@/lib/mascot-name'
 import { notifyReaction } from '@/lib/notify'
+import { head } from '@vercel/blob'
+import { deleteBlobs, MAX_PHOTOS, PDF_TYPE, PHOTO_TYPES, uploadPrefix } from '@/lib/submissions'
 import { addDays, addMonths, announceRound, isAdmin, todayJst, type Round } from '@/lib/rounds'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -154,7 +156,12 @@ export async function deleteDecl(form: FormData) {
   const id = str(form, 'id', 36)
   if (!isUuid(id)) return
   const sql = await db()
+  const files = (await sql`
+    select f.pathname from submission_files f join declarations d on d.id = f.decl_id
+    where d.id = ${id} and d.member_id = ${me.id}
+  `) as { pathname: string }[]
   await sql`delete from declarations where id = ${id} and member_id = ${me.id}`
+  after(() => deleteBlobs(files.map((f) => f.pathname)))
   revalidatePath('/', 'layout')
   redirect('/')
 }
@@ -261,3 +268,75 @@ export async function createRound(_prev: RoundFormState, form: FormData): Promis
   revalidatePath('/', 'layout')
   redirect('/')
 }
+
+export type SubmitState = { error?: string; ok?: boolean }
+type UploadedFile = { pathname: string }
+
+/**
+ * 成果を提出する。ファイルはブラウザから Blob に送ったあとで、その場所だけを受け取る。
+ * 出し直すと、ひとことも写真・PDF も差し替える。提出すると宣言は「達成」として報告済みになる。
+ */
+export async function submitResult(declId: string, input: { body: string; files: UploadedFile[] }): Promise<SubmitState> {
+  const me = await requireMe()
+  if (!isUuid(declId)) return { error: '宣言が見つかりません。' }
+  const body = String(input?.body ?? '').trim().slice(0, 300)
+  const list = Array.isArray(input?.files) ? input.files.slice(0, MAX_PHOTOS + 1) : []
+  const prefix = uploadPrefix(me.id, declId)
+  if (list.some((f) => typeof f?.pathname !== 'string' || !f.pathname.startsWith(prefix))) {
+    return { error: 'ファイルの場所が正しくありません。もう一度選び直してください。' }
+  }
+  if (!body && list.length === 0) return { error: 'ひとことか、写真・PDF を入れてください。' }
+
+  const sql = await db()
+  const decl = (await sql`select status, what from declarations where id = ${declId} and member_id = ${me.id}`) as {
+    status: string
+    what: string
+  }[]
+  if (!decl[0]) return { error: '自分の宣言にだけ提出できます。' }
+
+  // 実際に Blob に置かれた中身の種類と大きさを確かめる
+  const files: { pathname: string; content_type: string; size: number }[] = []
+  for (const f of list) {
+    try {
+      const h = await head(f.pathname)
+      files.push({ pathname: f.pathname, content_type: h.contentType, size: h.size })
+    } catch {
+      return { error: 'アップロードが終わっていないファイルがあります。もう一度試してください。' }
+    }
+  }
+  const photos = files.filter((f) => PHOTO_TYPES.includes(f.content_type))
+  const pdfs = files.filter((f) => f.content_type === PDF_TYPE)
+  if (photos.length + pdfs.length !== files.length || photos.length > MAX_PHOTOS || pdfs.length > 1) {
+    return { error: `写真は${MAX_PHOTOS}枚まで、PDF は1つまでです。` }
+  }
+
+  const old = (await sql`select pathname from submission_files where decl_id = ${declId}`) as { pathname: string }[]
+  await sql`
+    insert into submissions (decl_id, member_id, body) values (${declId}, ${me.id}, ${body})
+    on conflict (decl_id) do update set body = excluded.body, updated_at = now()
+  `
+  await sql`delete from submission_files where decl_id = ${declId}`
+  const ordered = [...photos, ...pdfs]
+  for (let i = 0; i < ordered.length; i++) {
+    const f = ordered[i]
+    await sql`
+      insert into submission_files (decl_id, pathname, content_type, size, position)
+      values (${declId}, ${f.pathname}, ${f.content_type}, ${f.size}, ${i})
+    `
+  }
+  const keep = new Set(ordered.map((f) => f.pathname))
+  after(() => deleteBlobs(old.map((o) => o.pathname).filter((p) => !keep.has(p))))
+
+  const changed = (await sql`
+    update declarations set status = 'done', reported_at = coalesce(reported_at, now())
+    where id = ${declId} and member_id = ${me.id} and status = 'doing'
+    returning what
+  `) as { what: string }[]
+  if (changed[0]) {
+    const msgs = await saveMessages(me.id, [{ kind: 'done', decl_id: declId, body: say.done(changed[0].what) }])
+    after(() => pushTo(me.id, msgs))
+  }
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+

@@ -31,6 +31,9 @@ export type Decl = {
   intro_count: number
   introed: boolean
   comment_count: number
+  round_name: string | null
+  /** ひも付いたラウンドの締め切り YYYY-MM-DD */
+  round_deadline: string | null
 }
 
 export async function listDecls(meId: string): Promise<Decl[]> {
@@ -44,8 +47,10 @@ export async function listDecls(meId: string): Promise<Decl[]> {
       exists(select 1 from offers o where o.decl_id = d.id and o.kind = 'help' and o.member_id = ${meId}) as helped,
       (select count(*)::int from offers o where o.decl_id = d.id and o.kind = 'intro') as intro_count,
       exists(select 1 from offers o where o.decl_id = d.id and o.kind = 'intro' and o.member_id = ${meId}) as introed,
-      (select count(*)::int from comments x where x.decl_id = d.id) as comment_count
+      (select count(*)::int from comments x where x.decl_id = d.id) as comment_count,
+      r.name as round_name, to_char(r.deadline, 'YYYY-MM-DD') as round_deadline
     from declarations d join members m on m.id = d.member_id
+    left join rounds r on r.id = d.round_id
     order by coalesce(d.reported_at, d.created_at) desc
     limit 300
   `) as Decl[]
