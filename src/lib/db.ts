@@ -84,6 +84,23 @@ async function migrate(sql: NeonQueryFunction<false, false>) {
   await sql`create unique index if not exists mascot_messages_round_once
     on mascot_messages (member_id, round_id, kind)
     where round_id is not null`
+  // 成果物の提出（宣言ごとに1つ。出し直すと中身を差し替える）
+  await sql`create table if not exists submissions (
+    decl_id uuid primary key references declarations(id) on delete cascade,
+    member_id uuid not null references members(id) on delete cascade,
+    body text not null default '',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`
+  // 写真（最大3枚）と PDF（1つ）。中身は Vercel Blob（非公開）に置き、ここにはその場所だけ
+  await sql`create table if not exists submission_files (
+    id uuid primary key default gen_random_uuid(),
+    decl_id uuid not null references submissions(decl_id) on delete cascade,
+    pathname text not null unique,
+    content_type text not null,
+    size integer not null,
+    position integer not null default 0
+  )`
 }
 
 /** Returns the SQL client, creating the tables once per server instance. */

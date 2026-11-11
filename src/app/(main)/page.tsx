@@ -7,6 +7,7 @@ import { MascotCard } from '@/components/mascot-card'
 import { RoundCard } from '@/components/round-card'
 import { CATS, listDecls } from '@/lib/data'
 import { requireMe } from '@/lib/session'
+import { submissionsFor } from '@/lib/submissions'
 
 export default function BoardPage(props: PageProps<'/'>) {
   return (
@@ -28,6 +29,7 @@ async function Board({ searchParams }: { searchParams: PageProps<'/'>['searchPar
   const cat = typeof sp.cat === 'string' ? sp.cat : 'all'
   const all = await listDecls(me.id)
   const list = all.filter((d) => cat === 'all' || d.cat === cat)
+  const subs = await submissionsFor(list.map((d) => d.id))
   const doing = all.filter((d) => d.status === 'doing').length
   const chips = [{ id: 'all', label: 'すべて' }, ...CATS]
 
@@ -62,7 +64,7 @@ async function Board({ searchParams }: { searchParams: PageProps<'/'>['searchPar
           </Link>
         </div>
       ) : (
-        list.map((d) => <DeclCard key={d.id} d={d} meId={me.id} />)
+        list.map((d) => <DeclCard key={d.id} d={d} meId={me.id} sub={subs.get(d.id)} />)
       )}
     </>
   )
