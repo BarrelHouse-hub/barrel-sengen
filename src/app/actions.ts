@@ -12,6 +12,7 @@ import { saveMessages, say } from '@/lib/mascot'
 import { isPushEndpoint, pushTo, sendPush, type PushResult } from '@/lib/push'
 import { MASCOT_NAME } from '@/lib/mascot-name'
 import { notifyReaction } from '@/lib/notify'
+import { addDays, addMonths, announceRound, isAdmin, todayJst, type Round } from '@/lib/rounds'
 
 const str = (f: FormData, k: string, max: number) => String(f.get(k) ?? '').trim().slice(0, max)
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v)
@@ -66,10 +67,15 @@ export async function createDecl(form: FormData) {
   const cat = isCat(catRaw) ? catRaw : 'work'
   const mode = str(form, 'mode', 10) === 'yuru' ? 'yuru' : 'gachi'
   const need = str(form, 'need', 60)
+  const roundRaw = str(form, 'round', 36)
   const sql = await db()
+  // 締め切り前のラウンドにだけひも付けられる
+  const round = isUuid(roundRaw)
+    ? ((await sql`select id from rounds where id = ${roundRaw} and deadline >= ${todayJst()}::date`) as { id: string }[])[0]
+    : undefined
   await sql`
-    insert into declarations (member_id, what, due, cat, mode, need)
-    values (${me.id}, ${what}, ${due}, ${cat}, ${mode}, ${need})
+    insert into declarations (member_id, what, due, cat, mode, need, round_id)
+    values (${me.id}, ${what}, ${due}, ${cat}, ${mode}, ${need}, ${round?.id ?? null})
   `
   revalidatePath('/', 'layout')
   redirect('/')
@@ -202,4 +208,56 @@ export async function sendTestPush(): Promise<PushResult> {
     body: 'テスト通知やで。これが見えてたら、ちゃんと届いてる！',
     url: '/mascot',
   })
+}
+
+export type RoundFormState = { error?: string }
+
+/** 運営がラウンドを作る。作ったら全員にお便りとスマホ通知で知らせる。 */
+export async function createRound(_prev: RoundFormState, form: FormData): Promise<RoundFormState> {
+  const me = await requireMe()
+  if (!(await isAdmin(me.id))) return { error: 'ラウンドを作れるのは運営だけです。' }
+  const name = str(form, 'name', 30)
+  if (!name) return { error: '名前を入れてください。' }
+  const today = todayJst()
+  const span = str(form, 'span', 10)
+  const deadlineRaw = str(form, 'deadline', 10)
+  const deadline = /^\d{4}-\d{2}-\d{2}$/.test(deadlineRaw)
+    ? deadlineRaw
+    : span === 'month'
+      ? addMonths(today, 1)
+      : addDays(today, 14)
+  if (deadline < today) return { error: '締め切りは今日より後にしてください。' }
+  const meetupRaw = str(form, 'meetup_at', 16)
+  // 入力は日本時間として受け取る
+  const meetupAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(meetupRaw) ? `${meetupRaw}:00+09:00` : null
+  const place = str(form, 'meetup_place', 60)
+  const mapRaw = str(form, 'meetup_map_url', 500)
+  let mapUrl = ''
+  if (mapRaw) {
+    try {
+      const u = new URL(mapRaw)
+      if (u.protocol !== 'https:') throw new Error()
+      mapUrl = u.toString()
+    } catch {
+      return { error: '地図の URL は https:// で始まるものを入れてください。' }
+    }
+  }
+  const note = str(form, 'note', 200)
+  const sql = await db()
+  const rows = (await sql`
+    insert into rounds (name, deadline, meetup_at, meetup_place, meetup_map_url, note, created_by)
+    values (${name}, ${deadline}, ${meetupAt}, ${place}, ${mapUrl}, ${note}, ${me.id})
+    returning id, name, to_char(deadline, 'YYYY-MM-DD') as deadline, meetup_at, meetup_place, meetup_map_url, note
+  `) as Round[]
+  const round = rows[0]
+  after(async () => {
+    try {
+      const sent = await announceRound(round)
+      for (const [id, msgs] of sent) await pushTo(id, msgs)
+    } catch (e) {
+      console.error('announceRound failed', e)
+    }
+  })
+  revalidatePath('/', 'layout')
+  redirect('/')
 }

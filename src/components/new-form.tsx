@@ -16,9 +16,13 @@ const label = 'text-xs font-bold text-muted'
 const chip =
   'flex min-h-11 cursor-pointer items-center justify-center rounded-lg border border-line2 px-3.5 text-sm font-bold text-ink has-checked:border-accent has-checked:bg-accent has-checked:text-ground has-focus-visible:outline-2 has-focus-visible:outline-accent'
 
-export function NewForm({ initialWhat, error }: { initialWhat: string; error: boolean }) {
+type RoundOption = { id: string; name: string; deadline: string }
+
+export function NewForm({ initialWhat, error, rounds }: { initialWhat: string; error: boolean; rounds: RoundOption[] }) {
   const [what, setWhat] = useState(initialWhat)
-  const [due, setDue] = useState('')
+  // 今のラウンドを最初から選んでおき、期限もその締め切りにしておく
+  const [round, setRound] = useState(rounds[0]?.id ?? '')
+  const [due, setDue] = useState(rounds[0]?.deadline ?? '')
   const [mode, setMode] = useState('gachi')
   const [cat, setCat] = useState('work')
   const ready = what.trim().length > 0
@@ -43,6 +47,32 @@ export function NewForm({ initialWhat, error }: { initialWhat: string; error: bo
         />
         {error ? <p className="text-xs text-accent" role="alert">やることを書いてください。</p> : null}
       </div>
+
+      {rounds.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="round" className={label}>ラウンド</label>
+          <select
+            id="round"
+            name="round"
+            value={round}
+            onChange={(e) => {
+              const next = rounds.find((r) => r.id === e.target.value)
+              const prev = rounds.find((r) => r.id === round)
+              // 期限をラウンドの締め切りのままにしていたら、選び直したラウンドに合わせる
+              if (!due || due === prev?.deadline) setDue(next?.deadline ?? '')
+              setRound(e.target.value)
+            }}
+            className={`${field} min-h-11`}
+          >
+            {rounds.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}（締め切り {r.deadline.slice(5).replace('-', '/')}）
+              </option>
+            ))}
+            <option value="">ラウンドに入れない</option>
+          </select>
+        </div>
+      ) : null}
 
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1.5">

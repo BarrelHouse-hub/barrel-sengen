@@ -65,6 +65,25 @@ async function migrate(sql: NeonQueryFunction<false, false>) {
     auth text not null,
     created_at timestamptz not null default now()
   )`
+  // 2週間サイクル（ラウンド）
+  await sql`create table if not exists rounds (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    deadline date not null,
+    meetup_at timestamptz,
+    meetup_place text not null default '',
+    meetup_map_url text not null default '',
+    note text not null default '',
+    created_by uuid references members(id) on delete set null,
+    created_at timestamptz not null default now()
+  )`
+  await sql`alter table declarations add column if not exists round_id uuid references rounds(id) on delete set null`
+  await sql`alter table members add column if not exists is_admin boolean not null default false`
+  // ラウンドの告知・リマインドは、同じ人に同じ種類を1回だけ
+  await sql`alter table mascot_messages add column if not exists round_id uuid references rounds(id) on delete cascade`
+  await sql`create unique index if not exists mascot_messages_round_once
+    on mascot_messages (member_id, round_id, kind)
+    where round_id is not null`
 }
 
 /** Returns the SQL client, creating the tables once per server instance. */
