@@ -37,6 +37,7 @@ const LABEL: Record<string, string> = {
   help: '手伝えるで',
   comment: 'コメント',
   cheer: '乾杯',
+  push_reset: '通知のこと',
 }
 
 function when(iso: string) {

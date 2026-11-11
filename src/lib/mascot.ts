@@ -19,6 +19,8 @@ export type MascotKind =
   | 'help'
   | 'comment'
   | 'cheer'
+  // スマホ通知が使えなくなったので、オンにし直してほしい
+  | 'push_reset'
 
 export type MascotMessage = {
   id: string
