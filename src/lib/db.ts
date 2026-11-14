@@ -101,6 +101,11 @@ async function migrate(sql: NeonQueryFunction<false, false>) {
     size integer not null,
     position integer not null default 0
   )`
+  // たるまるの声かけの頻度（more: 3日おき / normal: 週1 / less: 期限の知らせだけ）
+  await sql`alter table members add column if not exists checkin_freq text not null default 'normal'`
+  // 「調子どう？」への返事（good / stuck / tired）。ボードには出さない
+  await sql`alter table mascot_messages add column if not exists reply text`
+  await sql`alter table mascot_messages add column if not exists replied_at timestamptz`
 }
 
 /** Returns the SQL client, creating the tables once per server instance. */

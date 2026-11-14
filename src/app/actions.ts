@@ -8,7 +8,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
 import { makeToken, requireMe, SESSION_COOKIE } from '@/lib/session'
 import { isCat } from '@/lib/data'
-import { saveMessages, say } from '@/lib/mascot'
+import { isCheckinFreq, replyCheckin, saveMessages, say } from '@/lib/mascot'
 import { isPushEndpoint, pushTo, sendPush, type PushResult } from '@/lib/push'
 import { MASCOT_NAME } from '@/lib/mascot-name'
 import { notifyReaction } from '@/lib/notify'
@@ -171,6 +171,28 @@ export async function markMascotRead() {
   const sql = await db()
   // 開いている画面の「新着」表示は残したいので、ここでは再描画しない
   await sql`update mascot_messages set read_at = now() where member_id = ${me.id} and read_at is null`
+}
+
+/** 「調子どう？」にワンタップで返事する。記録だけでボードには出さない */
+export async function answerCheckin(form: FormData) {
+  const me = await requireMe()
+  const id = str(form, 'id', 36)
+  const raw = str(form, 'feeling', 10)
+  const feeling = raw === 'stuck' || raw === 'tired' ? raw : raw === 'good' ? 'good' : null
+  if (!isUuid(id) || !feeling) return
+  await replyCheckin(me.id, id, feeling)
+  // 返事へのお返しはその場で見えるので、スマホ通知は送らない
+  revalidatePath('/mascot')
+}
+
+/** たるまるの声かけの頻度を変える */
+export async function setCheckinFreq(form: FormData) {
+  const me = await requireMe()
+  const freq = str(form, 'freq', 10)
+  if (!isCheckinFreq(freq)) return
+  const sql = await db()
+  await sql`update members set checkin_freq = ${freq} where id = ${me.id}`
+  revalidatePath('/mascot')
 }
 
 type PushSub = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }
