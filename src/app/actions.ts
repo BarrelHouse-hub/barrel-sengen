@@ -152,13 +152,18 @@ export async function addComment(_prev: CommentState, form: FormData): Promise<C
   return {}
 }
 
-/** 自分のコメントだけ消せる。 */
+/** コメントを消せるのは、書いた本人か、そのコメントが付いている宣言の持ち主だけ。それ以外は何もしない。 */
 export async function deleteComment(form: FormData) {
   const me = await requireMe()
   const id = str(form, 'id', 36)
   if (!isUuid(id)) return
   const sql = await db()
-  await sql`delete from comments where id = ${id} and member_id = ${me.id}`
+  await sql`
+    delete from comments c
+    using declarations d
+    where c.id = ${id} and d.id = c.decl_id
+      and (c.member_id = ${me.id} or d.member_id = ${me.id})
+  `
   revalidatePath('/', 'layout')
 }
 
