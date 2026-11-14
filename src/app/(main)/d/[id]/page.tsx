@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { Header } from '@/components/header'
 import { CardsSkeleton, DeclCard } from '@/components/decl-card'
-import { addComment, deleteDecl, setStatus } from '@/app/actions'
+import { deleteDecl, setStatus } from '@/app/actions'
+import { CommentForm, DeleteCommentButton } from '@/components/comment-form'
 import { getDecl, listComments, listOffers } from '@/lib/data'
 import { requireMe } from '@/lib/session'
 import { SubmitForm } from '@/components/submit-form'
@@ -97,25 +98,14 @@ async function Detail({ params }: { params: PageProps<'/d/[id]'>['params'] }) {
         <h2 className="text-sm font-bold text-muted">コメント・ツッコミ</h2>
         {comments.length === 0 ? <p className="text-sm text-faint">まだありません。</p> : null}
         {comments.map((c) => (
-          <div key={c.id} className="rounded-md bg-surface px-3 py-2 text-sm leading-relaxed">
-            <span className="font-bold text-accent">{c.name}</span>　{c.body}
+          <div key={c.id} className="flex items-start gap-2 rounded-md bg-surface px-3 py-2 text-sm leading-relaxed">
+            <p className="min-w-0 flex-1 break-words">
+              <span className="font-bold text-accent">{c.name}</span>　{c.body}
+            </p>
+            {c.member_id === me.id ? <DeleteCommentButton id={c.id} /> : null}
           </div>
         ))}
-        <form action={addComment} className="flex gap-2">
-          <input type="hidden" name="id" value={d.id} />
-          <label htmlFor="body" className="sr-only">コメント</label>
-          <input
-            id="body"
-            name="body"
-            required
-            maxLength={200}
-            placeholder={d.status === 'miss' ? 'なんでできなかったんだろうね？' : '応援・ツッコミを書く'}
-            className="min-h-11 flex-1 rounded-lg border border-line2 bg-surface px-3 text-base focus:border-accent focus:outline-none"
-          />
-          <button type="submit" className="min-h-11 rounded-lg bg-accent px-4 text-sm font-bold text-ground">
-            送る
-          </button>
-        </form>
+        <CommentForm declId={d.id} placeholder={d.status === 'miss' ? 'なんでできなかったんだろうね？' : '応援・ツッコミを書く'} />
       </section>
 
       {mine ? (

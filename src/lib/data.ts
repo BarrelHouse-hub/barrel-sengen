@@ -73,9 +73,9 @@ export async function listOffers(declId: string) {
 export async function listComments(declId: string) {
   const sql = await db()
   return (await sql`
-    select x.id, x.body, m.name from comments x join members m on m.id = x.member_id
+    select x.id, x.member_id, x.body, m.name from comments x join members m on m.id = x.member_id
     where x.decl_id = ${declId} order by x.created_at
-  `) as { id: string; body: string; name: string }[]
+  `) as { id: string; member_id: string; body: string; name: string }[]
 }
 
 export function formatDue(due: string | null) {
