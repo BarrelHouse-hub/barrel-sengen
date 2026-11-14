@@ -120,14 +120,45 @@ export async function toggleOffer(form: FormData) {
   revalidatePath('/', 'layout')
 }
 
-export async function addComment(form: FormData) {
+export type CommentState = { error?: string }
+
+/**
+ * コメントを書く。送信中はボタンを押せないようにしているが、それでも同じ人が同じ宣言に
+ * 同じ本文を1分以内に送ってきたら（連打・通信のやり直し・送信後の再読み込み）1件にまとめる。
+ */
+export async function addComment(_prev: CommentState, form: FormData): Promise<CommentState> {
   const me = await requireMe()
   const id = str(form, 'id', 36)
   const body = str(form, 'body', 200)
-  if (!isUuid(id) || !body) return
+  if (!isUuid(id) || !body) return { error: 'コメントを入れてください。' }
   const sql = await db()
-  await sql`insert into comments (decl_id, member_id, body) values (${id}, ${me.id}, ${body})`
-  after(() => notifyReaction(id, me.id, { kind: 'comment', body }))
+  // 同じ人・同じ宣言の書き込みを順番に処理して、直前の同じ本文があれば入れない
+  const [, inserted] = (await sql.transaction([
+    sql`select pg_advisory_xact_lock(hashtext(${`comment:${me.id}:${id}`}))`,
+    sql`
+      insert into comments (decl_id, member_id, body)
+      select ${id}, ${me.id}, ${body}
+      where exists (select 1 from declarations where id = ${id})
+        and not exists (
+          select 1 from comments
+          where decl_id = ${id} and member_id = ${me.id} and body = ${body}
+            and created_at > now() - interval '1 minute'
+        )
+      returning 1
+    `,
+  ])) as [unknown, unknown[]]
+  if (inserted.length > 0) after(() => notifyReaction(id, me.id, { kind: 'comment', body }))
+  revalidatePath('/', 'layout')
+  return {}
+}
+
+/** 自分のコメントだけ消せる。 */
+export async function deleteComment(form: FormData) {
+  const me = await requireMe()
+  const id = str(form, 'id', 36)
+  if (!isUuid(id)) return
+  const sql = await db()
+  await sql`delete from comments where id = ${id} and member_id = ${me.id}`
   revalidatePath('/', 'layout')
 }
 
