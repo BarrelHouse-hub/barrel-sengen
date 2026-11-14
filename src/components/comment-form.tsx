@@ -32,7 +32,7 @@ export function CommentForm({ declId, placeholder }: { declId: string; placehold
   )
 }
 
-/** 自分のコメントを消す。押し間違いを防ぐため、1回確かめる。 */
+/** コメントを消す（書いた本人か宣言の持ち主だけに出す）。押し間違いを防ぐため、1回確かめる。 */
 export function DeleteCommentButton({ id }: { id: string }) {
   const [, action, pending] = useActionState(async (_: null, form: FormData) => {
     await deleteComment(form)

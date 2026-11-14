@@ -102,7 +102,7 @@ async function Detail({ params }: { params: PageProps<'/d/[id]'>['params'] }) {
             <p className="min-w-0 flex-1 break-words">
               <span className="font-bold text-accent">{c.name}</span>　{c.body}
             </p>
-            {c.member_id === me.id ? <DeleteCommentButton id={c.id} /> : null}
+            {c.member_id === me.id || mine ? <DeleteCommentButton id={c.id} /> : null}
           </div>
         ))}
         <CommentForm declId={d.id} placeholder={d.status === 'miss' ? 'なんでできなかったんだろうね？' : '応援・ツッコミを書く'} />
