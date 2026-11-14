@@ -2,6 +2,7 @@ import 'server-only'
 import { db } from './db'
 import { CAT_LABEL } from './data'
 import { MASCOT_NAME } from './mascot-name'
+import { suggestStep, withStep } from './suggest'
 
 /** バレルハウスのマスコット（仮）「たるまる」。樽の子。関西弁でゆるく応援する。 */
 export { MASCOT_NAME }
@@ -103,7 +104,7 @@ export async function generateFor(memberId: string): Promise<MascotMessage[]> {
 
   // 1. 自分の挑戦中の宣言について、1通だけ（期限切れ > 期限間近 > 進捗どう？の順）
   const decls = (await sql`
-    select d.id, d.what, to_char(d.due, 'YYYY-MM-DD') as due,
+    select d.id, d.what, d.cat, to_char(d.due, 'YYYY-MM-DD') as due,
       d.created_at < now() - interval '3 days' as settled,
       exists(select 1 from mascot_messages x where x.decl_id = d.id and x.member_id = ${memberId} and x.kind = 'overdue') as told_overdue,
       exists(select 1 from mascot_messages x where x.decl_id = d.id and x.member_id = ${memberId} and x.kind = 'due_soon') as told_due_soon,
@@ -117,6 +118,7 @@ export async function generateFor(memberId: string): Promise<MascotMessage[]> {
   `) as {
     id: string
     what: string
+    cat: string
     due: string | null
     settled: boolean
     told_overdue: boolean
@@ -129,7 +131,11 @@ export async function generateFor(memberId: string): Promise<MascotMessage[]> {
   const quiet = decls.find((d) => d.settled && d.progress_ok)
   if (overdue) out.push({ kind: 'overdue', decl_id: overdue.id, body: say.overdue(overdue.what) })
   else if (soon) out.push({ kind: 'due_soon', decl_id: soon.id, body: say.dueSoon(soon.what, daysUntil(soon.due!)) })
-  else if (quiet) out.push({ kind: 'progress', decl_id: quiet.id, body: say.progress(quiet.what) })
+  else if (quiet) {
+    // 進捗確認には「次の一歩」の提案を添える（最近届けた文は避ける）
+    const step = suggestStep({ cat: quiet.cat, daysLeft: quiet.due ? daysUntil(quiet.due) : null }, await recentBodies(memberId))
+    out.push({ kind: 'progress', decl_id: quiet.id, body: withStep(say.progress(quiet.what), step) })
+  }
 
   // 2. 好みに合う、ほかの人の宣言を紹介（3日に1通まで）
   const [{ recommend_ok, has_any }] = (await sql`
@@ -171,6 +177,15 @@ export async function generateFor(memberId: string): Promise<MascotMessage[]> {
   }
 
   return saveMessages(memberId, out)
+}
+
+/** 最近そのひとに届けたお便りの本文（同じ提案が続かないようにするため） */
+export async function recentBodies(memberId: string): Promise<string[]> {
+  const sql = await db()
+  const rows = (await sql`
+    select body from mascot_messages where member_id = ${memberId} order by created_at desc limit 10
+  `) as { body: string }[]
+  return rows.map((r) => r.body)
 }
 
 export async function saveMessages(memberId: string, msgs: NewMsg[]): Promise<MascotMessage[]> {

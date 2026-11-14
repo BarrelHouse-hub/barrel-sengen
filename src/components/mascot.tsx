@@ -32,7 +32,7 @@ export function Bubble({ children, tone = 'paper' }: { children: React.ReactNode
         aria-hidden="true"
         className={`absolute top-5 -left-1.5 size-3 rotate-45 ${tone === 'paper' ? 'bg-paper' : 'border-b border-l border-line bg-surface'}`}
       />
-      <div className="relative">{children}</div>
+      <div className="relative whitespace-pre-line">{children}</div>
     </div>
   )
 }
