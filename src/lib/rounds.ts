@@ -218,3 +218,21 @@ export async function roundReminders(targets: string[]) {
   return out
 }
 
+
+/**
+ * みんなの樽（お試し）。今のラウンドの宣言のうち「達成した」の割合。
+ * テーブルは持たず、宣言のステータスから毎回数える。環境変数 BARREL_TEAM_BARREL=off で出さない。
+ */
+export function teamBarrelEnabled() {
+  const v = (process.env.BARREL_TEAM_BARREL ?? '').trim().toLowerCase()
+  return !['off', '0', 'false', 'no'].includes(v)
+}
+
+export async function teamBarrel(roundId: string): Promise<{ total: number; done: number }> {
+  const sql = await db()
+  const rows = (await sql`
+    select count(*)::int as total, count(*) filter (where status = 'done')::int as done
+    from declarations where round_id = ${roundId}
+  `) as { total: number; done: number }[]
+  return rows[0] ?? { total: 0, done: 0 }
+}
